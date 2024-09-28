@@ -1,2 +1,2 @@
-# sinatra-turbo
-Sinatra Ruby App with Hotwire Turbo
+# sinatra-api
+Sinatra Ruby Api
