@@ -17,12 +17,7 @@ db_connection.execute <<-SQL
 SQL
 
 # Route principale
-get '/' do
+get '/restaurants' do
   @restaurants = db_connection.execute("SELECT name FROM restaurants")
-  erb :index
-end
-
-# Route /about
-get '/about' do
-  erb :about
+  erb :restaurants
 end
