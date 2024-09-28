@@ -4,7 +4,10 @@ require 'sqlite3'
 require 'rack/cors'
 require 'jwt'
 require 'bcrypt'
+require 'securerandom'
+require 'date'
 
+# CORS configuration (ouvert pour le moment)
 use Rack::Cors do
   allow do
     origins '*' 
@@ -12,6 +15,7 @@ use Rack::Cors do
   end
 end
 
+# Base de données SQLite
 def dbc
   db = SQLite3::Database.new "data.db"
   db.results_as_hash = true 
@@ -21,32 +25,39 @@ end
 dbc.execute <<-SQL
   CREATE TABLE IF NOT EXISTS restaurants (
     id INTEGER PRIMARY KEY,
-    name TEXT
+    name TEXT NOT NULL
   );
 
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY,
-    username TEXT UNIQUE,
-    password_hash TEXT
+    username TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL
   );
 SQL
 
-SECRET_KEY = 'your_secret_key_here'
+# Clé secrète pour JWT (stockée de manière sécurisée en production)
+SECRET_KEY = ENV['SECRET_KEY_BASE'] || SecureRandom.hex(64)
 
+# Génération du token JWT avec expiration
 def create_token(user_id)
-  payload = { user_id: user_id }
+  payload = {
+    user_id: user_id,
+    exp: (Time.now + 3600).to_i # Le token expire dans 1 heure
+  }
   JWT.encode(payload, SECRET_KEY, 'HS256')
 end
 
+# Vérification du token JWT
 def verify_token(token)
   begin
     decoded = JWT.decode(token, SECRET_KEY, true, { algorithm: 'HS256' })
-    return decoded[0]['user_id']
-  rescue JWT::DecodeError
+    return decoded[0]['user_id'] if decoded[0]['exp'] > Time.now.to_i
+  rescue JWT::DecodeError, JWT::ExpiredSignature
     return nil
   end
 end
 
+# Authentification par JWT
 def authenticate!
   token = request.env['HTTP_AUTHORIZATION']&.split(' ')&.last
   user_id = verify_token(token)
@@ -54,22 +65,25 @@ def authenticate!
   user_id
 end
 
-# Filtre avant chaque requête pour définir le type de contenu
+# Filtre pour définir le type de contenu
 before do
   content_type :json
 end
 
+# Sanitize function for inputs (to prevent injections)
+def sanitize(input)
+  input.strip.gsub(/<|>|\"|\'/, '')
+end
+
 # Enregistrement d'un nouvel utilisateur
 post '/register' do
-  username = params[:username]
+  username = sanitize(params[:username])
   password = params[:password]
-  
-  if username.nil? || password.nil?
-    halt 400, { message: "Username and password are required" }.to_json
-  end
-  
+
+  halt 400, { message: "Username and password are required" }.to_json if username.empty? || password.nil?
+
   password_hash = BCrypt::Password.create(password)
-  
+
   begin
     dbc.execute("INSERT INTO users (username, password_hash) VALUES (?, ?)", [username, password_hash])
     status 201
@@ -81,11 +95,11 @@ end
 
 # Connexion utilisateur
 post '/login' do
-  username = params[:username]
+  username = sanitize(params[:username])
   password = params[:password]
-  
+
   user = dbc.execute("SELECT * FROM users WHERE username = ?", [username]).first
-  
+
   if user && BCrypt::Password.new(user['password_hash']) == password
     token = create_token(user['id'])
     { token: token }.to_json
@@ -100,26 +114,24 @@ get '/restaurants' do
   { restaurants: restaurants }.to_json
 end
 
-# Ajout d'un nouveau restaurant
+# Ajout d'un nouveau restaurant (authentification requise)
 post '/restaurant' do
   authenticate!
-  name = params[:name]
-  
-  if name.nil? || name.empty?
-    halt 400, { message: "Name is required" }.to_json
-  end
+  name = sanitize(params[:name])
+
+  halt 400, { message: "Name is required" }.to_json if name.empty?
 
   dbc.execute("INSERT INTO restaurants (name) VALUES (?)", name)
   status 201
   { message: "Restaurant added successfully" }.to_json
 end
 
-# Récupération d'un restaurant par son ID
+# Récupération d'un restaurant par son ID (authentification requise)
 get '/restaurant/:id' do
   authenticate!
-  id = params[:id]
+  id = params[:id].to_i
   restaurant = dbc.execute("SELECT * FROM restaurants WHERE id = ?", [id]).first
-  
+
   if restaurant
     { restaurant: restaurant }.to_json
   else
@@ -127,32 +139,30 @@ get '/restaurant/:id' do
   end
 end
 
-# Suppression d'un restaurant par son ID
+# Suppression d'un restaurant par son ID (authentification requise)
 delete '/restaurant/:id' do
   authenticate!
-  id = params[:id]
+  id = params[:id].to_i
   result = dbc.execute("DELETE FROM restaurants WHERE id = ?", [id])
-  
-  if result.changes > 0
+
+  if dbc.changes > 0
     { message: "Restaurant deleted successfully" }.to_json
   else
     halt 404, { message: "Restaurant not found" }.to_json
   end
 end
 
-# Mise à jour d'un restaurant par son ID
+# Mise à jour d'un restaurant par son ID (authentification requise)
 put '/restaurant/:id' do
   authenticate!
-  id = params[:id]
-  name = params[:name]
+  id = params[:id].to_i
+  name = sanitize(params[:name])
 
-  if name.nil? || name.empty?
-    halt 400, { message: "Name is required" }.to_json
-  end
+  halt 400, { message: "Name is required" }.to_json if name.empty?
 
   result = dbc.execute("UPDATE restaurants SET name = ? WHERE id = ?", [name, id])
-  
-  if result.changes > 0
+
+  if dbc.changes > 0
     { message: "Restaurant updated successfully" }.to_json
   else
     halt 404, { message: "Restaurant not found" }.to_json
@@ -161,7 +171,6 @@ end
 
 # Gestion des routes inexistantes
 not_found do
-  authenticate!
   content_type :json
   halt 404, { message: "Route not found" }.to_json
 end
