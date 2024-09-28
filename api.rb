@@ -27,8 +27,10 @@ dbc.execute <<-SQL
     id INTEGER PRIMARY KEY,
     name TEXT NOT NULL
   );
+SQL
 
-  CREATE TABLE IF NOT EXISTS users (
+dbc.execute <<-SQL
+CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY,
     username TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL
