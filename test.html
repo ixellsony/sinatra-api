@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test HTMX avec JWT</title>
+    <script src="https://unpkg.com/htmx.org@1.8.4"></script>
+    <script>
+        // Fonction pour stocker le token JWT
+        function storeToken(token) {
+            localStorage.setItem('jwtToken', token);
+        }
+
+        // Fonction pour récupérer le token JWT
+        function getToken() {
+            return localStorage.getItem('jwtToken');
+        }
+
+        // Ajout d'un en-tête personnalisé à toutes les requêtes HTMX
+        htmx.on('htmx:configRequest', (event) => {
+            const token = getToken();
+            if (token) {
+                event.detail.headers['Authorization'] = 'Bearer ' + token;
+            }
+        });
+
+        // Gestion de la réponse de connexion
+        htmx.on('htmx:afterOnLoad', (event) => {
+            if (event.detail.target.id === 'response') {
+                try {
+                    const response = JSON.parse(event.detail.xhr.responseText);
+                    if (response.token) {
+                        storeToken(response.token);
+                        document.getElementById('response').innerHTML = 'Connexion réussie !';
+                    }
+                } catch (e) {
+                    // La réponse n'était pas un JSON valide, on ne fait rien
+                }
+            }
+        });
+    </script>
+</head>
+<body>
+    <h1>Ajouter un Restaurant</h1>
+    <form id="restaurantForm" hx-post="http://localhost:4567/restaurant" hx-target="#response" hx-swap="innerHTML">
+        <label for="name">Nom du restaurant :</label>
+        <input type="text" id="name" name="name" required>
+        <button type="submit">Ajouter</button>
+    </form>
+    
+    <h1>Connexion</h1>
+    <form hx-post="http://localhost:4567/login" hx-target="#response" hx-swap="innerHTML">
+        <label for="username">Username:</label>
+        <input type="text" id="username" name="username" required>
+        
+        <label for="password">Password:</label>
+        <input type="password" id="password" name="password" required>
+        
+        <button type="submit">Se connecter</button>
+    </form>
+
+    <h1>Inscription</h1>
+    <form hx-post="http://localhost:4567/register" hx-target="#response" hx-swap="innerHTML">
+        <label for="register-username">Username:</label>
+        <input type="text" id="register-username" name="username" required>
+        
+        <label for="register-password">Password:</label>
+        <input type="password" id="register-password" name="password" required>
+        
+        <button type="submit">S'inscrire</button>
+    </form>
+
+    <div id="response"></div>
+</body>
+</html>
