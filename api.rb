@@ -113,3 +113,26 @@ get '/restaurant/:id' do
     "Aucun restaurant avec cet id"
   end
 end
+
+delete '/restaurant/:id' do
+  authenticate!
+  id = params[:id]
+  result = dbc.execute("DELETE FROM restaurants WHERE id = ?", id)
+  if result.changes > 0
+    "Restaurant supprimé avec succès"
+  else
+    "Aucun restaurant trouvé avec cet id"
+  end
+end
+
+put '/restaurant/:id' do
+  authenticate!
+  id = params[:id]
+  name = params[:name]
+  result = dbc.execute("UPDATE restaurants SET name = ? WHERE id = ?", [name, id])
+  if result.changes > 0
+    "Restaurant modifié avec succès"
+  else
+    "Aucun restaurant trouvé avec cet id"
+  end
+end
