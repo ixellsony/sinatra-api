@@ -146,12 +146,7 @@ delete '/restaurant/:id' do
   authenticate!
   id = params[:id].to_i
   result = dbc.execute("DELETE FROM restaurants WHERE id = ?", [id])
-
-  if dbc.changes > 0
-    { message: "Restaurant deleted successfully" }.to_json
-  else
-    halt 404, { message: "Restaurant not found" }.to_json
-  end
+  { message: "Restaurant deleted successfully" }.to_json
 end
 
 # Mise à jour d'un restaurant par son ID (authentification requise)
@@ -163,12 +158,8 @@ put '/restaurant/:id' do
   halt 400, { message: "Name is required" }.to_json if name.empty?
 
   result = dbc.execute("UPDATE restaurants SET name = ? WHERE id = ?", [name, id])
+  { message: "Restaurant updated successfully" }.to_json
 
-  if dbc.changes > 0
-    { message: "Restaurant updated successfully" }.to_json
-  else
-    halt 404, { message: "Restaurant not found" }.to_json
-  end
 end
 
 # Gestion des routes inexistantes
